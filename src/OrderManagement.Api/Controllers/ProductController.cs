@@ -57,14 +57,7 @@ namespace OrderManagement.Api.Controllers
 
             if (!ModelState.IsValid)
             {
-                var v = new ValidationProblemDetails(ModelState)
-                {
-                    Type = "https://example.com/probs/validation",
-                    Title = "One or more validation errors occurred.",
-                    Status = StatusCodes.Status400BadRequest,
-                    Detail = "See the errors property for details."
-                };
-                return BadRequest(v);
+                return BadRequest(OrderManagement.Api.Infrastructure.ProblemDetailsFactory.CreateValidationProblemDetails(ModelState, HttpContext));
             }
 
             IEnumerable<Product> query = _store.Where(p => p.Active);
@@ -82,14 +75,7 @@ namespace OrderManagement.Api.Controllers
             if (totalPages > 0 && page > totalPages)
             {
                 ModelState.AddModelError("page", $"Page must be between 1 and {totalPages}.");
-                var v = new ValidationProblemDetails(ModelState)
-                {
-                    Type = "https://example.com/probs/validation",
-                    Title = "One or more validation errors occurred.",
-                    Status = StatusCodes.Status400BadRequest,
-                    Detail = "See the errors property for details."
-                };
-                return BadRequest(v);
+                return BadRequest(OrderManagement.Api.Infrastructure.ProblemDetailsFactory.CreateValidationProblemDetails(ModelState, HttpContext));
             }
 
             var items = query
@@ -137,14 +123,7 @@ namespace OrderManagement.Api.Controllers
             // Model validation via DataAnnotations
             if (!TryValidateModel(req))
             {
-                var v = new ValidationProblemDetails(ModelState)
-                {
-                    Type = "https://example.com/probs/validation",
-                    Title = "One or more validation errors occurred.",
-                    Status = StatusCodes.Status400BadRequest,
-                    Detail = "See the errors property for details."
-                };
-                return BadRequest(v);
+                return BadRequest(OrderManagement.Api.Infrastructure.ProblemDetailsFactory.CreateValidationProblemDetails(ModelState, HttpContext));
             }
 
             // Duplicate SKU check
@@ -168,26 +147,12 @@ namespace OrderManagement.Api.Controllers
             catch (ArgumentOutOfRangeException ex)
             {
                 ModelState.AddModelError(ex.ParamName ?? "", ex.Message);
-                var v = new ValidationProblemDetails(ModelState)
-                {
-                    Type = "https://example.com/probs/validation",
-                    Title = "One or more validation errors occurred.",
-                    Status = StatusCodes.Status400BadRequest,
-                    Detail = "See the errors property for details."
-                };
-                return BadRequest(v);
+                return BadRequest(OrderManagement.Api.Infrastructure.ProblemDetailsFactory.CreateValidationProblemDetails(ModelState, HttpContext));
             }
             catch (ArgumentException ex)
             {
                 ModelState.AddModelError(ex.ParamName ?? "", ex.Message);
-                var v = new ValidationProblemDetails(ModelState)
-                {
-                    Type = "https://example.com/probs/validation",
-                    Title = "One or more validation errors occurred.",
-                    Status = StatusCodes.Status400BadRequest,
-                    Detail = "See the errors property for details."
-                };
-                return BadRequest(v);
+                return BadRequest(OrderManagement.Api.Infrastructure.ProblemDetailsFactory.CreateValidationProblemDetails(ModelState, HttpContext));
             }
             catch (Exception ex)
             {
