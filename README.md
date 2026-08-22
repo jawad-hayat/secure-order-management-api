@@ -6,8 +6,8 @@ This workspace contains the OrderManagement API used for demo and development.
 
 When running the API in the Development environment, an interactive Swagger UI is available at:
 
-- https://localhost:7072/swagger
-- http://localhost:5028/swagger
+- https://localhost:7072/swagger/index.html
+- http://localhost:5028/swagger/index.html
 
 From that UI you can exercise and verify:
 - GET /api/products?page=1&pageSize=20&search=phone
