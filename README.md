@@ -27,10 +27,7 @@ Sample POST /api/products JSON request
   "sku": "EX-1000",
   "description": "Short description",
   "price": 19.99,
-  "currency": "USD",
-  "category": "default",
-  "stock": 100,
-  "tags": ["new","featured"]
+  "availableQuantity": 100
 }
 ```
 
