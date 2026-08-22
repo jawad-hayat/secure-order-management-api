@@ -14,8 +14,8 @@ namespace OrderManagement.Api.Mapping.Products
             Price = p.Price,
             AvailableQuantity = p.AvailableQuantity,
             Active = p.Active,
-            CreatedAt = p.CreatedAt,
-            UpdatedAt = p.UpdatedAt
+            CreatedAtUtc = p.CreatedAt,
+            UpdatedAtUtc = p.UpdatedAt
         };
     }
 }

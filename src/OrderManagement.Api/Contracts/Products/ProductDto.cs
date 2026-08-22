@@ -9,7 +9,7 @@
         public decimal Price { get; set; }
         public int AvailableQuantity { get; set; }
         public bool Active { get; set; }
-        public DateTimeOffset CreatedAt { get; set; }
-        public DateTimeOffset UpdatedAt { get; set; }
+        public DateTimeOffset CreatedAtUtc { get; set; }
+        public DateTimeOffset UpdatedAtUtc { get; set; }
     }
 }
