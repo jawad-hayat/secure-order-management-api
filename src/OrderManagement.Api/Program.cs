@@ -1,4 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
+using System;
+using Microsoft.EntityFrameworkCore;
+using OrderManagement.Api.Infrastructure;
+using Npgsql.EntityFrameworkCore.PostgreSQL;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +27,17 @@ builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options 
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+// Configure EF Core with PostgreSQL provider. Connection string must be provided via user secrets
+// or an untracked appsettings.Development.json under "ConnectionStrings:OrderManagement".
+var orderConn = builder.Configuration.GetConnectionString("OrderManagement");
+if (string.IsNullOrWhiteSpace(orderConn))
+{
+    // Fail fast with a clear error so developers know how to configure their local environment.
+    throw new InvalidOperationException("Missing required connection string 'ConnectionStrings:OrderManagement'.\n" +
+                                        "Set it using 'dotnet user-secrets set \"ConnectionStrings:OrderManagement\" \"Host=localhost;Database=order_management_dev;Username=oms;Password=YOUR_PASSWORD\"'\n" +
+                                        "or create an untracked src/OrderManagement.Api/appsettings.Development.json with the ConnectionStrings section.");
+}
+
 
 var app = builder.Build();
 

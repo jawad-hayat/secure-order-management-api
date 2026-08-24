@@ -4,18 +4,23 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>e14d5fbb-3e0b-44b0-aebe-c60f8de58a4b</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
     <!-- Ensure explicit, aligned Swashbuckle assemblies to avoid runtime type mismatches -->
     <PackageReference Include="Swashbuckle.AspNetCore.Swagger" Version="10.2.3" />
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="10.2.3" />
+    <!-- Entity Framework Core runtime package to enable AddDbContext and common EF APIs -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="Application\Products\" />
+    <Folder Include="Data\" />
   </ItemGroup>
 
 </Project>
