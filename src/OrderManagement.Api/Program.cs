@@ -38,6 +38,8 @@ if (string.IsNullOrWhiteSpace(orderConn))
                                         "or create an untracked src/OrderManagement.Api/appsettings.Development.json with the ConnectionStrings section.");
 }
 
+// Register OrderManagementDbContext with PostgreSQL provider
+builder.Services.AddDbContext<OrderManagementDbContext>(opts => opts.UseNpgsql(orderConn));
 
 var app = builder.Build();
 

@@ -34,6 +34,9 @@ namespace OrderManagement.Api.Domain.Products
         /// <summary>Last update timestamp (UTC).</summary>
         public DateTimeOffset UpdatedAt { get; private set; }
 
+        /// <summary>Soft-delete flag. When true the product is considered deleted and excluded from normal queries.</summary>
+        public bool IsDeleted { get; private set; }
+
         // Parameterless ctor for serializers/ORMs
         private Product() { }
 

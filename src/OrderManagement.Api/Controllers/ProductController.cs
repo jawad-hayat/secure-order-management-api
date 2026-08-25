@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using OrderManagement.Api.Domain.Products;
@@ -8,6 +9,8 @@ using Microsoft.Extensions.Logging;
 using System.ComponentModel.DataAnnotations;
 using OrderManagement.Api.Contracts.Products;
 using OrderManagement.Api.Mapping.Products;
+using OrderManagement.Api.Infrastructure;
+using Microsoft.EntityFrameworkCore;
 
 namespace OrderManagement.Api.Controllers
 {
@@ -17,38 +20,19 @@ namespace OrderManagement.Api.Controllers
     public class ProductController : ControllerBase
     {
         private readonly ILogger<ProductController> _logger;
-        // In-memory store for demo purposes. Replace with repository/DB in production.
-        private static readonly List<Product> _store = new();
+        private readonly OrderManagementDbContext _db;
 
-        // Seed with 50 sample products for demo/testing
-        static ProductController()
-        {
-            for (int i = 1; i <= 50; i++)
-            {
-                try
-                {
-                    decimal price = decimal.Round(5m + i * 1.25m, 2);
-                    int qty = Math.Min(i * 10, 100000);
-                    var p = Product.Create($"Product {i}", $"sku{i:0000}", price, qty, $"Sample product {i}", active: true);
-                    _store.Add(p);
-                }
-                catch
-                {
-                    // ignore seeding errors for demo data
-                }
-            }
-        }
-
-        public ProductController(ILogger<ProductController> logger)
+        public ProductController(ILogger<ProductController> logger, OrderManagementDbContext db)
         {
             _logger = logger;
+            _db = db;
         }
 
         /// <summary>
         /// List products with paging and optional search.
         /// </summary>
         [HttpGet]
-        public ActionResult<IEnumerable<ProductDto>> List([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null)
+        public async Task<ActionResult<IEnumerable<ProductDto>>> List([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null)
         {
             if (page < 1)
                 ModelState.AddModelError("page", "Page must be at least 1.");
@@ -60,16 +44,16 @@ namespace OrderManagement.Api.Controllers
                 return BadRequest(OrderManagement.Api.Infrastructure.ProblemDetailsFactory.CreateValidationProblemDetails(ModelState, HttpContext));
             }
 
-            IEnumerable<Product> query = _store.Where(p => p.Active);
+            IQueryable<Product> query = _db.Products.AsNoTracking().Where(p => p.Active);
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var s = search.Trim();
-                query = query.Where(p => p.Name.Contains(s, StringComparison.OrdinalIgnoreCase)
-                                         || p.Sku.Contains(s, StringComparison.OrdinalIgnoreCase));
+                // Use case-insensitive match via database function when available
+                query = query.Where(p => EF.Functions.ILike(p.Name, $"%{s}%") || EF.Functions.ILike(p.Sku, $"%{s}%"));
             }
 
             // Validate that requested page is within available range
-            var totalCount = query.Count();
+            var totalCount = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
             if (totalPages > 0 && page > totalPages)
@@ -78,11 +62,13 @@ namespace OrderManagement.Api.Controllers
                 return BadRequest(OrderManagement.Api.Infrastructure.ProblemDetailsFactory.CreateValidationProblemDetails(ModelState, HttpContext));
             }
 
-            var items = query
+            var pageItems = await query
+                .OrderBy(p => p.Name)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(ProductMapping.MapToDto)
-                .ToArray();
+                .ToListAsync();
+
+            var items = pageItems.Select(ProductMapping.MapToDto).ToArray();
 
             return Ok(items);
         }
@@ -91,9 +77,9 @@ namespace OrderManagement.Api.Controllers
         /// Get a single product by id.
         /// </summary>
         [HttpGet("{id:guid}")]
-        public ActionResult<ProductDto> GetById([FromRoute] Guid id)
+        public async Task<ActionResult<ProductDto>> GetById([FromRoute] Guid id)
         {
-            var product = _store.FirstOrDefault(p => p.Id == id && p.Active);
+            var product = await _db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id && p.Active);
             if (product is null)
             {
                 return NotFound(new ProblemDetails
@@ -112,7 +98,7 @@ namespace OrderManagement.Api.Controllers
         /// Create a new product.
         /// </summary>
         [HttpPost]
-        public ActionResult<ProductDto> Create([FromBody] CreateProductRequest req)
+        public async Task<ActionResult<ProductDto>> Create([FromBody] CreateProductRequest req)
         {
             if (req is null)
                 return BadRequest(new ProblemDetails { Title = "Request body is required", Status = StatusCodes.Status400BadRequest });
@@ -127,7 +113,7 @@ namespace OrderManagement.Api.Controllers
             }
 
             // Duplicate SKU check
-            if (_store.Any(p => string.Equals(p.Sku, req.Sku, StringComparison.OrdinalIgnoreCase)))
+            if (await _db.Products.AnyAsync(p => p.Sku == req.Sku))
             {
                 return Conflict(new ProblemDetails
                 {
@@ -143,6 +129,8 @@ namespace OrderManagement.Api.Controllers
             try
             {
                 product = Product.Create(req.Name!, req.Sku!, req.Price, req.AvailableQuantity, req.Description, active: true);
+                _db.Products.Add(product);
+                await _db.SaveChangesAsync();
             }
             catch (ArgumentOutOfRangeException ex)
             {
@@ -168,17 +156,14 @@ namespace OrderManagement.Api.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, prob);
             }
 
-            _store.Add(product);
-
-            var dto = ProductMapping.MapToDto(product);
-            return CreatedAtAction(nameof(GetById), new { id = product.Id }, dto);
+            return CreatedAtAction(nameof(GetById), new { id = product.Id }, ProductMapping.MapToDto(product));
         }
 
         /// <summary>
         /// Replace editable details of a product.
         /// </summary>
         [HttpPut("{id:guid}")]
-        public IActionResult Replace([FromRoute] Guid id, [FromBody] UpdateProductRequest req)
+        public async Task<IActionResult> Replace([FromRoute] Guid id, [FromBody] UpdateProductRequest req)
         {
             if (req is null)
                 return BadRequest(new ProblemDetails { Title = "Request body is required", Status = StatusCodes.Status400BadRequest });
@@ -198,13 +183,13 @@ namespace OrderManagement.Api.Controllers
                 return BadRequest(v);
             }
 
-            var product = _store.FirstOrDefault(p => p.Id == id && p.Active);
+            var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == id && p.Active);
             if (product is null)
                 return NotFound(new ProblemDetails { Type = "https://example.com/probs/not-found", Title = "Product not found", Status = StatusCodes.Status404NotFound });
 
             // Check if SKU conflicts with another product
             if (!string.Equals(product.Sku, req.Sku, StringComparison.OrdinalIgnoreCase)
-                && _store.Any(p => p.Id != product.Id && string.Equals(p.Sku, req.Sku, StringComparison.OrdinalIgnoreCase)))
+                && await _db.Products.AnyAsync(p => p.Id != product.Id && string.Equals(p.Sku, req.Sku, StringComparison.OrdinalIgnoreCase)))
             {
                 return Conflict(new ProblemDetails
                 {
@@ -224,6 +209,8 @@ namespace OrderManagement.Api.Controllers
                 // adjust quantity directly to requested value
                 var delta = req.AvailableQuantity - product.AvailableQuantity;
                 if (delta != 0) product.AdjustQuantity(delta);
+
+                await _db.SaveChangesAsync();
             }
             catch (ArgumentOutOfRangeException ex)
             {
@@ -270,13 +257,14 @@ namespace OrderManagement.Api.Controllers
         /// Deactivate (soft-delete) a product.
         /// </summary>
         [HttpDelete("{id:guid}")]
-        public IActionResult Deactivate([FromRoute] Guid id)
+        public async Task<IActionResult> Deactivate([FromRoute] Guid id)
         {
-            var product = _store.FirstOrDefault(p => p.Id == id && p.Active);
+            var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == id && p.Active);
             if (product is null)
                 return NotFound(new ProblemDetails { Type = "https://example.com/probs/not-found", Title = "Product not found", Status = StatusCodes.Status404NotFound });
 
             product.Deactivate();
+            await _db.SaveChangesAsync();
             return NoContent();
         }
     }
