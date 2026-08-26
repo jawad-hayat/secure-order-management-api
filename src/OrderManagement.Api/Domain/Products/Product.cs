@@ -124,19 +124,21 @@ namespace OrderManagement.Api.Domain.Products
             }
         }
 
-        /// <summary>Mark product inactive.</summary>
-        public void Deactivate()
-        {
-            if (Active)
-            {
-                Active = false;
-                Touch();
-            }
-        }
-
         private void Touch()
         {
             UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        /// <summary>
+        /// Soft-delete the product.
+        /// </summary>
+        public void SoftDelete()
+        {
+            if (!IsDeleted)
+            {
+                IsDeleted = true;
+                Touch();
+            }
         }
 
         #region Validation helpers

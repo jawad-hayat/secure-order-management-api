@@ -18,8 +18,8 @@ namespace OrderManagement.Api.Infrastructure
 
             modelBuilder.ApplyConfiguration(new ProductEntityConfiguration());
 
-            // Apply global query filter for soft-delete. Product defines IsDeleted as shadow or real property
-            modelBuilder.Entity<Product>().HasQueryFilter(p => EF.Property<bool>(p, "IsDeleted") == false);
+            // Apply global query filter for soft-delete. Product now has a real IsDeleted property
+            modelBuilder.Entity<Product>().HasQueryFilter(p => !p.IsDeleted);
         }
     }
 }

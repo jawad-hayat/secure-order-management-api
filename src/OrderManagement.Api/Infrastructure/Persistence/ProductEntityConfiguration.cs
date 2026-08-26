@@ -47,8 +47,8 @@ namespace OrderManagement.Api.Infrastructure.Persistence
                 .HasColumnType("timestamptz")
                 .HasColumnName("updated_at_utc");
 
-            // Soft-delete flag
-            builder.Property<bool>("IsDeleted")
+            // Soft-delete flag mapped to domain property
+            builder.Property(p => p.IsDeleted)
                 .HasColumnName("is_deleted")
                 .HasDefaultValue(false);
 

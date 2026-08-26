@@ -10,6 +10,9 @@ using System.ComponentModel.DataAnnotations;
 using OrderManagement.Api.Contracts.Products;
 using OrderManagement.Api.Mapping.Products;
 using OrderManagement.Api.Infrastructure;
+using Npgsql;
+using Microsoft.EntityFrameworkCore;
+using System.Threading;
 using Microsoft.EntityFrameworkCore;
 
 namespace OrderManagement.Api.Controllers
@@ -32,7 +35,7 @@ namespace OrderManagement.Api.Controllers
         /// List products with paging and optional search.
         /// </summary>
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<ProductDto>>> List([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null)
+        public async Task<ActionResult<IEnumerable<ProductDto>>> List([FromQuery] int page = 1, [FromQuery] int pageSize = 20, [FromQuery] string? search = null, CancellationToken cancellationToken = default)
         {
             if (page < 1)
                 ModelState.AddModelError("page", "Page must be at least 1.");
@@ -53,7 +56,7 @@ namespace OrderManagement.Api.Controllers
             }
 
             // Validate that requested page is within available range
-            var totalCount = await query.CountAsync();
+            var totalCount = await query.CountAsync(cancellationToken);
             var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
             if (totalPages > 0 && page > totalPages)
@@ -62,13 +65,23 @@ namespace OrderManagement.Api.Controllers
                 return BadRequest(OrderManagement.Api.Infrastructure.ProblemDetailsFactory.CreateValidationProblemDetails(ModelState, HttpContext));
             }
 
-            var pageItems = await query
+            var items = await query
                 .OrderBy(p => p.Name)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .ToListAsync();
-
-            var items = pageItems.Select(ProductMapping.MapToDto).ToArray();
+                .Select(p => new ProductDto
+                {
+                    Id = p.Id,
+                    Name = p.Name,
+                    Sku = p.Sku,
+                    Description = p.Description,
+                    Price = p.Price,
+                    AvailableQuantity = p.AvailableQuantity,
+                    Active = p.Active,
+                    CreatedAtUtc = p.CreatedAt,
+                    UpdatedAtUtc = p.UpdatedAt
+                })
+                .ToArrayAsync(cancellationToken);
 
             return Ok(items);
         }
@@ -77,9 +90,23 @@ namespace OrderManagement.Api.Controllers
         /// Get a single product by id.
         /// </summary>
         [HttpGet("{id:guid}")]
-        public async Task<ActionResult<ProductDto>> GetById([FromRoute] Guid id)
+        public async Task<ActionResult<ProductDto>> GetById([FromRoute] Guid id, CancellationToken cancellationToken = default)
         {
-            var product = await _db.Products.AsNoTracking().FirstOrDefaultAsync(p => p.Id == id && p.Active);
+            var product = await _db.Products.AsNoTracking()
+                .Where(p => p.Id == id && p.Active)
+                .Select(p => new ProductDto
+                {
+                    Id = p.Id,
+                    Name = p.Name,
+                    Sku = p.Sku,
+                    Description = p.Description,
+                    Price = p.Price,
+                    AvailableQuantity = p.AvailableQuantity,
+                    Active = p.Active,
+                    CreatedAtUtc = p.CreatedAt,
+                    UpdatedAtUtc = p.UpdatedAt
+                })
+                .FirstOrDefaultAsync(cancellationToken);
             if (product is null)
             {
                 return NotFound(new ProblemDetails
@@ -91,14 +118,14 @@ namespace OrderManagement.Api.Controllers
                 });
             }
 
-            return Ok(ProductMapping.MapToDto(product));
+            return Ok(product);
         }
 
         /// <summary>
         /// Create a new product.
         /// </summary>
         [HttpPost]
-        public async Task<ActionResult<ProductDto>> Create([FromBody] CreateProductRequest req)
+        public async Task<ActionResult<ProductDto>> Create([FromBody] CreateProductRequest req, CancellationToken cancellationToken = default)
         {
             if (req is null)
                 return BadRequest(new ProblemDetails { Title = "Request body is required", Status = StatusCodes.Status400BadRequest });
@@ -112,25 +139,13 @@ namespace OrderManagement.Api.Controllers
                 return BadRequest(OrderManagement.Api.Infrastructure.ProblemDetailsFactory.CreateValidationProblemDetails(ModelState, HttpContext));
             }
 
-            // Duplicate SKU check
-            if (await _db.Products.AnyAsync(p => p.Sku == req.Sku))
-            {
-                return Conflict(new ProblemDetails
-                {
-                    Type = "https://example.com/probs/conflict",
-                    Title = "Conflict - duplicate SKU",
-                    Status = StatusCodes.Status409Conflict,
-                    Detail = "A product with the same SKU already exists."
-                });
-            }
-
-            // Create domain product and handle domain validation exceptions
+            // Create domain product and handle domain validation exceptions; let DB unique constraint handle races
             Product product;
             try
             {
                 product = Product.Create(req.Name!, req.Sku!, req.Price, req.AvailableQuantity, req.Description, active: true);
                 _db.Products.Add(product);
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(cancellationToken);
             }
             catch (ArgumentOutOfRangeException ex)
             {
@@ -141,6 +156,31 @@ namespace OrderManagement.Api.Controllers
             {
                 ModelState.AddModelError(ex.ParamName ?? "", ex.Message);
                 return BadRequest(OrderManagement.Api.Infrastructure.ProblemDetailsFactory.CreateValidationProblemDetails(ModelState, HttpContext));
+            }
+            catch (DbUpdateException dbEx)
+            {
+                // Translate unique constraint violation to 409 Conflict without leaking DB details
+                if (dbEx.InnerException is PostgresException pg && pg.SqlState == "23505")
+                {
+                    return Conflict(new ProblemDetails
+                    {
+                        Type = "https://example.com/probs/conflict",
+                        Title = "Conflict - duplicate SKU",
+                        Status = StatusCodes.Status409Conflict,
+                        Detail = "A product with the same SKU already exists."
+                    });
+                }
+
+                _logger.LogError(dbEx, "Database update error while creating product (SKU: {Sku}).", req.Sku);
+                var probDb = new ProblemDetails
+                {
+                    Type = "https://example.com/probs/internal-error",
+                    Title = "An unexpected database error occurred.",
+                    Status = StatusCodes.Status500InternalServerError,
+                    Detail = "An unexpected error occurred while creating the product.",
+                    Instance = HttpContext.TraceIdentifier
+                };
+                return StatusCode(StatusCodes.Status500InternalServerError, probDb);
             }
             catch (Exception ex)
             {
@@ -157,6 +197,31 @@ namespace OrderManagement.Api.Controllers
             }
 
             return CreatedAtAction(nameof(GetById), new { id = product.Id }, ProductMapping.MapToDto(product));
+        }
+
+        /// <summary>
+        /// Soft-delete a product.
+        /// </summary>
+        [HttpDelete("{id:guid}")]
+        public async Task<IActionResult> Delete([FromRoute] Guid id, CancellationToken cancellationToken = default)
+        {
+            var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == id && p.Active, cancellationToken);
+            if (product is null)
+            {
+                return NotFound(new ProblemDetails
+                {
+                    Type = "https://example.com/probs/not-found",
+                    Title = "Product not found",
+                    Status = StatusCodes.Status404NotFound,
+                    Detail = $"Product with id '{id}' was not found."
+                });
+            }
+
+            // Mark soft-deleted and save
+            product.SoftDelete();
+            await _db.SaveChangesAsync(cancellationToken);
+
+            return NoContent();
         }
 
         /// <summary>
@@ -250,21 +315,6 @@ namespace OrderManagement.Api.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, prob);
             }
 
-            return NoContent();
-        }
-
-        /// <summary>
-        /// Deactivate (soft-delete) a product.
-        /// </summary>
-        [HttpDelete("{id:guid}")]
-        public async Task<IActionResult> Deactivate([FromRoute] Guid id)
-        {
-            var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == id && p.Active);
-            if (product is null)
-                return NotFound(new ProblemDetails { Type = "https://example.com/probs/not-found", Title = "Product not found", Status = StatusCodes.Status404NotFound });
-
-            product.Deactivate();
-            await _db.SaveChangesAsync();
             return NoContent();
         }
     }
