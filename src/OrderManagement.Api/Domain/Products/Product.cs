@@ -137,6 +137,8 @@ namespace OrderManagement.Api.Domain.Products
             if (!IsDeleted)
             {
                 IsDeleted = true;
+                // mark inactive when soft-deleted so clients see product is not active
+                Active = false;
                 Touch();
             }
         }

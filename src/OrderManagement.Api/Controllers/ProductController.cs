@@ -221,14 +221,15 @@ namespace OrderManagement.Api.Controllers
             product.SoftDelete();
             await _db.SaveChangesAsync(cancellationToken);
 
-            return NoContent();
+            // Return the deleted resource representation so clients can confirm the result
+            return Ok(ProductMapping.MapToDto(product));
         }
 
         /// <summary>
         /// Replace editable details of a product.
         /// </summary>
         [HttpPut("{id:guid}")]
-        public async Task<IActionResult> Replace([FromRoute] Guid id, [FromBody] UpdateProductRequest req)
+        public async Task<IActionResult> Replace([FromRoute] Guid id, [FromBody] UpdateProductRequest req, CancellationToken cancellationToken = default)
         {
             if (req is null)
                 return BadRequest(new ProblemDetails { Title = "Request body is required", Status = StatusCodes.Status400BadRequest });
@@ -252,9 +253,9 @@ namespace OrderManagement.Api.Controllers
             if (product is null)
                 return NotFound(new ProblemDetails { Type = "https://example.com/probs/not-found", Title = "Product not found", Status = StatusCodes.Status404NotFound });
 
-            // Check if SKU conflicts with another product
+            // Check if SKU conflicts with another product (use database-aware case-insensitive comparison)
             if (!string.Equals(product.Sku, req.Sku, StringComparison.OrdinalIgnoreCase)
-                && await _db.Products.AnyAsync(p => p.Id != product.Id && string.Equals(p.Sku, req.Sku, StringComparison.OrdinalIgnoreCase)))
+                && await _db.Products.AnyAsync(p => p.Id != product.Id && EF.Functions.ILike(p.Sku, req.Sku), cancellationToken))
             {
                 return Conflict(new ProblemDetails
                 {
@@ -275,7 +276,7 @@ namespace OrderManagement.Api.Controllers
                 var delta = req.AvailableQuantity - product.AvailableQuantity;
                 if (delta != 0) product.AdjustQuantity(delta);
 
-                await _db.SaveChangesAsync();
+                await _db.SaveChangesAsync(cancellationToken);
             }
             catch (ArgumentOutOfRangeException ex)
             {
@@ -315,7 +316,8 @@ namespace OrderManagement.Api.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, prob);
             }
 
-            return NoContent();
+            // Return the updated resource representation
+            return Ok(ProductMapping.MapToDto(product));
         }
     }
 }
