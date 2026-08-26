@@ -5,27 +5,23 @@ This workspace contains the OrderManagement API used for demo and development.
 Prerequisites
 - .NET 10 SDK
 - PostgreSQL server (local or reachable) and psql client (for creating the local database)
-- dotnet-ef tool (installed via dotnet tool restore using the provided manifest)
+- EF Core CLI tool (`dotnet-ef`) installed globally
 
 Local configuration (secrets)
 - Use user-secrets to store the local connection string (do not commit passwords):
 
   cd src/OrderManagement.Api
-  dotnet user-secrets init
   dotnet user-secrets set "ConnectionStrings:OrderManagement" "Host=localhost;Database=order_management_dev;Username=oms;Password=YOUR_PASSWORD"
 
-- Alternatively copy `src/OrderManagement.Api/appsettings.Development.example.json` to
-  `src/OrderManagement.Api/appsettings.Development.json` and fill in the password. Do NOT commit that file.
+- The project already has a User Secrets ID. Do not put a real connection string or password in any tracked configuration file.
 
 Database migrations
-- Restore tools and packages:
+- Restore packages:
 
   dotnet restore
-  dotnet tool restore
 
-- Create and apply EF migrations (project root):
+- Apply the committed migration to the local database (project root):
 
-  dotnet ef migrations add InitialCreate --project src/OrderManagement.Api --startup-project src/OrderManagement.Api --context OrderManagementDbContext
   dotnet ef database update --project src/OrderManagement.Api --startup-project src/OrderManagement.Api --context OrderManagementDbContext
 
 Local verification steps
@@ -45,7 +41,7 @@ Local verification steps
 6. Request a paged, searched product list (GET /api/products?page=1&pageSize=20&search=...) and confirm behavior matches Lesson 1: validation, paging limits, and search behavior.
 
 Notes
-- The repository contains `src/OrderManagement.Api/appsettings.Development.example.json` as a safe template (no passwords). Use user-secrets or an untracked dev config for secrets.
+- Use User Secrets for local connection strings and passwords. The safe configuration template contains no real credentials.
 - The API returns RFC 7807 Problem Details for validation, not-found, conflict and internal errors. Follow the documented response shapes when validating behavior.
 
 To run locally:
