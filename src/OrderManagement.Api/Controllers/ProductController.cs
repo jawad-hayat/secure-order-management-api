@@ -302,6 +302,31 @@ namespace OrderManagement.Api.Controllers
                 };
                 return BadRequest(v);
             }
+            catch (DbUpdateException dbEx)
+            {
+                // Translate unique constraint violation to 409 Conflict without leaking DB details
+                if (dbEx.InnerException is PostgresException pg && pg.SqlState == "23505")
+                {
+                    return Conflict(new ProblemDetails
+                    {
+                        Type = "https://example.com/probs/conflict",
+                        Title = "Conflict - duplicate SKU",
+                        Status = StatusCodes.Status409Conflict,
+                        Detail = "A product with the same SKU already exists."
+                    });
+                }
+
+                _logger.LogError(dbEx, "Database update error while updating product (Id: {Id}).", id);
+                var probDb = new ProblemDetails
+                {
+                    Type = "https://example.com/probs/internal-error",
+                    Title = "An unexpected database error occurred.",
+                    Status = StatusCodes.Status500InternalServerError,
+                    Detail = "An unexpected error occurred while updating the product.",
+                    Instance = HttpContext.TraceIdentifier
+                };
+                return StatusCode(StatusCodes.Status500InternalServerError, probDb);
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Unexpected error while updating product (Id: {Id}).", id);

@@ -23,9 +23,7 @@ namespace OrderManagement.Api.Infrastructure.Persistence
 
             builder.HasIndex(p => p.Sku)
                 .IsUnique()
-                .HasDatabaseName("ux_products_sku")
-                // Ensure uniqueness only for non-deleted rows so SKUs from soft-deleted products can be reused
-                .HasFilter("is_deleted = false");
+                .HasDatabaseName("ux_products_sku");
 
             builder.Property(p => p.Description)
                 .HasMaxLength(1000);
