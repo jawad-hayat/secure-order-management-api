@@ -46,3 +46,10 @@ Notes: the table is unchanged from the requested model. Roles are coarse-grained
 
 - Local developer secrets (store in dotnet user-secrets or OS-provided secure storage): local database connection strings (without committing passwords), OAuth client IDs (public), API keys for development/testing, and any credentials needed to run the app locally.
 - Never commit to Git (repository or examples): production connection strings, database passwords, private keys, JWT signing secrets, OAuth client secrets, third-party API secrets, or any PII. Put production secrets in a dedicated secret store (Key Vault, AWS Secrets Manager, environment variables injected by the deployment platform) and reference them at runtime.
+
+## Identity configuration decisions
+
+- Password policy: require digits, lowercase and uppercase letters, minimum length 8, do not require non-alphanumeric characters. Rationale: balances developer ergonomics for local testing while enforcing reasonable complexity; production deployments should consider stricter rules or require MFA for admin accounts.
+- Lockout policy: lock out after 5 failed attempts for 15 minutes. Rationale: reduces brute-force feasibility while allowing recovery for legitimate users.
+
+These non-default choices (relaxed non-alphanumeric requirement, explicit lockout thresholds) are intentional trade-offs for development and documented here so reviewers can tighten them for production.

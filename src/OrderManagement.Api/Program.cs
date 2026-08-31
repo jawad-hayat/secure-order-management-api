@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using System;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 using OrderManagement.Api.Infrastructure;
 using Npgsql.EntityFrameworkCore.PostgreSQL;
 
@@ -40,6 +41,27 @@ if (string.IsNullOrWhiteSpace(orderConn))
 
 // Register OrderManagementDbContext with PostgreSQL provider
 builder.Services.AddDbContext<OrderManagementDbContext>(opts => opts.UseNpgsql(orderConn));
+
+// Configure ASP.NET Core Identity with Guid keys and EF Core stores
+builder.Services.AddIdentity<OrderManagement.Api.Infrastructure.Identity.ApplicationUser, Microsoft.AspNetCore.Identity.IdentityRole<Guid>>(options =>
+{
+    // Password requirements - deliberate choices documented in docs/security-design.md
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireUppercase = true;
+    options.Password.RequireNonAlphanumeric = false; // allow simpler symbols for developer convenience
+    options.Password.RequiredLength = 8;
+
+    // Lockout settings
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+    options.Lockout.AllowedForNewUsers = true;
+
+    // User settings
+    options.User.RequireUniqueEmail = false; // email uniqueness optional for now
+})
+    .AddEntityFrameworkStores<OrderManagementDbContext>()
+    .AddDefaultTokenProviders();
 
 var app = builder.Build();
 

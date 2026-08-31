@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OrderManagement.Api.Infrastructure;
@@ -11,9 +12,11 @@ using OrderManagement.Api.Infrastructure;
 namespace OrderManagement.Api.Migrations
 {
     [DbContext(typeof(OrderManagementDbContext))]
-    partial class OrderManagementDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260831151727_Identity persistence")]
+    partial class Identitypersistence
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
