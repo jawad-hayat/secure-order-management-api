@@ -49,10 +49,10 @@ Notes: the table is unchanged from the requested model. Roles are coarse-grained
 
 ## Identity configuration decisions
 
-- Password policy: require digits, lowercase and uppercase letters, minimum length 8, do not require non-alphanumeric characters. Rationale: balances developer ergonomics for local testing while enforcing reasonable complexity; production deployments should consider stricter rules or require MFA for admin accounts.
+- Password policy: require digits, lowercase and uppercase letters, at least one non-alphanumeric character, and a minimum length of 12. Rationale: this provides a stronger baseline against password guessing; privileged production accounts should also use MFA where available.
 - Lockout policy: lock out after 5 failed attempts for 15 minutes. Rationale: reduces brute-force feasibility while allowing recovery for legitimate users.
 
-These non-default choices (relaxed non-alphanumeric requirement, explicit lockout thresholds) are intentional trade-offs for development and documented here so reviewers can tighten them for production.
+These choices (strong password requirements and explicit lockout thresholds) are documented so reviewers can evaluate them as the application evolves.
 
 ## Role & Admin Seeding Decisions
 
@@ -77,7 +77,7 @@ These non-default choices (relaxed non-alphanumeric requirement, explicit lockou
 ### CORS Policy Design
 - **Named Policy**: `"AngularDevClient"`.
 - **Allowed Origins**: Strictly configured (default: `http://localhost:4200` via `Cors:AllowedOrigins`), never wildcard `*`.
-- **Credentials**: `.AllowCredentials()` is enabled only because specific explicit origins are specified (`WithOrigins(...)`), ensuring adherence to CORS security specifications.
+- **Credentials**: Browser credentials are not enabled. The API uses bearer tokens in the `Authorization` header rather than cookie authentication, so this follows least privilege.
 
 ### Structured Security Logging
 - **Events Logged**:
@@ -92,12 +92,12 @@ These non-default choices (relaxed non-alphanumeric requirement, explicit lockou
 
 ### Answers of asked questions
 1. What is the difference between authentication and authorization?
-authentication ensure user can access the system i.e. can enter the gateway but authorization ensures what a user can do like whether he is allowed to create a product or not.
+Authentication proves the caller's identity (who they are), for example by validating their password at login or validating a bearer token. Authorization decides what that authenticated caller is allowed to do, for example whether they may create a product.
 2. When should this API return `401` versus `403`?
-when user is not authenticated API returns 401 when a user is unauthorize API returns 403
+Return `401 Unauthorized` when credentials are missing or invalid. Return `403 Forbidden` when the caller is authenticated but does not have the required permission, such as a Customer trying to create a product.
 3. Why must `UseAuthentication()` appear before `UseAuthorization()`?
-because authentication happens before authorization
+`UseAuthentication()` validates the credentials and populates `HttpContext.User`. `UseAuthorization()` must run afterwards so it can evaluate that authenticated identity and its roles against the endpoint policy.
 4. Why cannot a Customer role by itself prove that the customer owns order `123`?
-because he may claim wrong order in order to avoid conflict it should be the admin who decides whether this order belong to customer or not.
+A Customer role only proves that the caller has customer-level permissions; it does not identify which order they own. The API must load order `123` and verify that `order.CustomerId` equals the authenticated user's ID before allowing a customer-scoped action.
 
 

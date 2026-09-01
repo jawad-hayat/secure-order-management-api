@@ -30,8 +30,7 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(allowedOrigins)
               .AllowAnyMethod()
-              .AllowAnyHeader()
-              .AllowCredentials();
+              .AllowAnyHeader();
     });
 });
 
@@ -138,8 +137,8 @@ builder.Services.AddIdentity<OrderManagement.Api.Infrastructure.Identity.Applica
     options.Password.RequireDigit = true;
     options.Password.RequireLowercase = true;
     options.Password.RequireUppercase = true;
-    options.Password.RequireNonAlphanumeric = false; // allow simpler symbols for developer convenience
-    options.Password.RequiredLength = 8;
+    options.Password.RequireNonAlphanumeric = true;
+    options.Password.RequiredLength = 12;
 
     // Lockout settings
     options.Lockout.MaxFailedAccessAttempts = 5;

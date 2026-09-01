@@ -67,8 +67,8 @@ Abuse controls & design decisions
     1. **NAT / Shared Networks**: Multiple users behind a corporate gateway or NAT share the same public IP; one misbehaving client may temporarily throttle legitimate users on that network.
     2. **Reverse Proxy / Spoofing**: In production behind a reverse proxy (e.g. NGINX, Cloudflare, ALB), `ForwardedHeadersMiddleware` with configured `KnownProxies` / `KnownNetworks` must be used. Relying on unverified `X-Forwarded-For` allows attackers to bypass IP limits via spoofed headers.
 - **CORS Policy**:
-  - Narrow named policy `"AngularDevClient"` explicitly permits `http://localhost:4200` (configurable via `Cors:AllowedOrigins`) with credentials.
-  - Adheres to OWASP standards by never combining `AllowAnyOrigin()` with `AllowCredentials()`.
+  - Narrow named policy `"AngularDevClient"` explicitly permits `http://localhost:4200` (configurable via `Cors:AllowedOrigins`).
+  - This API uses bearer tokens in the `Authorization` header, not browser cookies, so CORS credentials are not enabled.
 - **Security Logging**:
   - Logs structured events with machine-readable placeholders for SIEM integration.
   - Strict sanitization: passwords, access tokens, and Authorization headers are completely omitted from logs.
