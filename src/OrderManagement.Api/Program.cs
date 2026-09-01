@@ -1,9 +1,15 @@
-using Microsoft.AspNetCore.Mvc;
-using System;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
-using OrderManagement.Api.Infrastructure;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using Npgsql.EntityFrameworkCore.PostgreSQL;
+using OrderManagement.Api.Infrastructure;
+using System;
+using System.Text;
+using System.Collections.Generic;
+using Swashbuckle.AspNetCore.Filters;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,7 +33,33 @@ builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options 
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "OrderManagement.Api",
+        Version = "v1",
+        Description = "Order Management API with JWT Authentication"
+    });
+
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "JWT Authorization header using the Bearer scheme. Enter your token below."
+    });
+
+    options.AddSecurityRequirement(doc => new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecuritySchemeReference("Bearer", doc),
+            new List<string>()
+        }
+    });
+});
 // Configure EF Core with PostgreSQL provider. Connection string must be provided via user secrets
 // or an untracked appsettings.Development.json under "ConnectionStrings:OrderManagement".
 var orderConn = builder.Configuration.GetConnectionString("OrderManagement");
@@ -63,6 +95,44 @@ builder.Services.AddIdentity<OrderManagement.Api.Infrastructure.Identity.Applica
     .AddEntityFrameworkStores<OrderManagementDbContext>()
     .AddDefaultTokenProviders();
 
+// Configure JWT authentication
+var jwtKey = builder.Configuration["Jwt:Key"];
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "OrderManagementApi";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "OrderManagementApiClients";
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    // Fail fast in development so developers configure user-secrets
+    throw new InvalidOperationException("Missing JWT signing key. Set Jwt:Key in user-secrets before running the app.");
+}
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtIssuer,
+            ValidAudience = jwtAudience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        };
+    });
+
+// Configure Authorization policies
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("Admin", policy => policy.RequireRole("Admin"));
+    options.AddPolicy("Customer", policy => policy.RequireRole("Customer"));
+});
+
+// Swagger JWT security configured above in AddSwaggerGen
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -75,13 +145,15 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
-        c.SwaggerEndpoint("/openapi/v1.json", "OrderManagement.Api v1");
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "OrderManagement.Api v1");
         c.RoutePrefix = "swagger";
     });
 }
 
 app.UseHttpsRedirection();
 
+// Authentication must be called before Authorization
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

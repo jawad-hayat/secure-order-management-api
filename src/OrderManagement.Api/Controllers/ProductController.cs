@@ -14,6 +14,7 @@ using Npgsql;
 using Microsoft.EntityFrameworkCore;
 using System.Threading;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 
 namespace OrderManagement.Api.Controllers
 {
@@ -125,6 +126,7 @@ namespace OrderManagement.Api.Controllers
         /// Create a new product.
         /// </summary>
         [HttpPost]
+        [Authorize("Admin")]
         public async Task<ActionResult<ProductDto>> Create([FromBody] CreateProductRequest req, CancellationToken cancellationToken = default)
         {
             if (req is null)
@@ -203,6 +205,7 @@ namespace OrderManagement.Api.Controllers
         /// Soft-delete a product.
         /// </summary>
         [HttpDelete("{id:guid}")]
+        [Authorize("Admin")]
         public async Task<IActionResult> Delete([FromRoute] Guid id, CancellationToken cancellationToken = default)
         {
             var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == id && p.Active, cancellationToken);
@@ -229,6 +232,7 @@ namespace OrderManagement.Api.Controllers
         /// Replace editable details of a product.
         /// </summary>
         [HttpPut("{id:guid}")]
+        [Authorize("Admin")]
         public async Task<IActionResult> Replace([FromRoute] Guid id, [FromBody] UpdateProductRequest req, CancellationToken cancellationToken = default)
         {
             if (req is null)

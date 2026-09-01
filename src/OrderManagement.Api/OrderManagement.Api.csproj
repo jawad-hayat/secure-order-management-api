@@ -22,14 +22,18 @@
     <!-- Ensure explicit, aligned Swashbuckle assemblies to avoid runtime type mismatches -->
     <PackageReference Include="Swashbuckle.AspNetCore.Swagger" Version="10.2.3" />
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="10.2.3" />
+    <PackageReference Include="Swashbuckle.AspNetCore.Filters" Version="10.0.1" />
     <!-- Entity Framework Core runtime package to enable AddDbContext and common EF APIs -->
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
     <!-- ASP.NET Core Identity EF Core integration -->
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
+    <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="Application\Products\" />
+    <Folder Include="wwwroot\swagger-ui\" />
   </ItemGroup>
 
 </Project>
