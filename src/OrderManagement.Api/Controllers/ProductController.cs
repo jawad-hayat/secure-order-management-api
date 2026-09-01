@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -128,6 +129,9 @@ namespace OrderManagement.Api.Controllers
         [Authorize("Admin")]
         public async Task<ActionResult<ProductDto>> Create([FromBody] CreateProductRequest req, CancellationToken cancellationToken = default)
         {
+            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.Identity?.Name ?? "unknown_user";
+
             if (req is null)
                 return BadRequest(new ProblemDetails { Title = "Request body is required", Status = StatusCodes.Status400BadRequest });
 
@@ -147,6 +151,9 @@ namespace OrderManagement.Api.Controllers
                 product = Product.Create(req.Name!, req.Sku!, req.Price, req.AvailableQuantity, req.Description, active: true);
                 _db.Products.Add(product);
                 await _db.SaveChangesAsync(cancellationToken);
+
+                _logger.LogInformation("Security event: Product created. ProductId: {ProductId}, Sku: {Sku}, CreatedBy: {UserId}, ClientIp: {ClientIp}, TraceId: {TraceId}",
+                    product.Id, product.Sku, userId, clientIp, HttpContext.TraceIdentifier);
             }
             catch (ArgumentOutOfRangeException ex)
             {
@@ -207,6 +214,9 @@ namespace OrderManagement.Api.Controllers
         [Authorize("Admin")]
         public async Task<IActionResult> Delete([FromRoute] Guid id, CancellationToken cancellationToken = default)
         {
+            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.Identity?.Name ?? "unknown_user";
+
             var product = await _db.Products.FirstOrDefaultAsync(p => p.Id == id && p.Active, cancellationToken);
             if (product is null)
             {
@@ -223,6 +233,9 @@ namespace OrderManagement.Api.Controllers
             product.SoftDelete();
             await _db.SaveChangesAsync(cancellationToken);
 
+            _logger.LogInformation("Security event: Product soft-deleted. ProductId: {ProductId}, DeletedBy: {UserId}, ClientIp: {ClientIp}, TraceId: {TraceId}",
+                id, userId, clientIp, HttpContext.TraceIdentifier);
+
             // Return the deleted resource representation so clients can confirm the result
             return Ok(ProductMapping.MapToDto(product));
         }
@@ -234,6 +247,9 @@ namespace OrderManagement.Api.Controllers
         [Authorize("Admin")]
         public async Task<IActionResult> Replace([FromRoute] Guid id, [FromBody] UpdateProductRequest req, CancellationToken cancellationToken = default)
         {
+            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? User.Identity?.Name ?? "unknown_user";
+
             if (req is null)
                 return BadRequest(new ProblemDetails { Title = "Request body is required", Status = StatusCodes.Status400BadRequest });
 
@@ -280,6 +296,9 @@ namespace OrderManagement.Api.Controllers
                 if (delta != 0) product.AdjustQuantity(delta);
 
                 await _db.SaveChangesAsync(cancellationToken);
+
+                _logger.LogInformation("Security event: Product updated. ProductId: {ProductId}, Sku: {Sku}, UpdatedBy: {UserId}, ClientIp: {ClientIp}, TraceId: {TraceId}",
+                    product.Id, product.Sku, userId, clientIp, HttpContext.TraceIdentifier);
             }
             catch (ArgumentOutOfRangeException ex)
             {

@@ -43,15 +43,39 @@ Local verification steps
    - **403 Forbidden**: Register and log in as a Customer (`/api/auth/register`, `/api/auth/login`), attach the Bearer token, and send `POST /api/products`. Confirm response is `403 Forbidden`.
    - **201 Created**: Log in with the seeded Admin user (`admin` / `AdminPassword123!`), attach the Admin Bearer token, and send `POST /api/products`. Confirm response is `201 Created`.
 
-5. Attempt to create the same normalized SKU twice. The second request must return `409 Conflict` with the project's Problem Details shape (type `https://example.com/probs/conflict`). The API handles races by translating DB unique constraint violations to 409.
+5. **Abuse Controls Verification**:
+   - **Rate Limiting (429 Too Many Requests)**:
+     Send 6 rapid `POST /api/auth/login` requests from the same client IP. The 6th request will be rejected with HTTP `429 Too Many Requests` and an RFC 7807 Problem Details payload (`type: https://example.com/probs/rate-limited`).
+   - **CORS Policy (Origin Isolation)**:
+     - Preflight `OPTIONS /api/products` with `Origin: http://localhost:4200` &rarr; returns `Access-Control-Allow-Origin: http://localhost:4200` and `Access-Control-Allow-Credentials: true`.
+     - Preflight `OPTIONS /api/products` with an untrusted origin (`Origin: http://malicious.example.com`) &rarr; rejected without CORS allow headers.
+   - **Structured Security Logging**:
+     Review server console output. All authentication attempts, lockout events, rate-limit rejections, and administrative mutations emit structured logs (`ClientIp`, `UserName`, `UserId`, `TraceId`). **Passwords, access tokens, and Authorization headers are never logged.**
 
-6. Soft-delete a product (DELETE /api/products/{id}) with the Admin token and confirm that normal GET list and GET by id do NOT expose the soft-deleted product.
+6. Attempt to create the same normalized SKU twice. The second request must return `409 Conflict` with the project's Problem Details shape (type `https://example.com/probs/conflict`). The API handles races by translating DB unique constraint violations to 409.
 
-7. Request a paged, searched product list (GET /api/products?page=1&pageSize=20&search=...) and confirm behavior matches validation, paging limits, and search behavior.
+7. Soft-delete a product (DELETE /api/products/{id}) with the Admin token and confirm that normal GET list and GET by id do NOT expose the soft-deleted product.
+
+8. Request a paged, searched product list (GET /api/products?page=1&pageSize=20&search=...) and confirm behavior matches validation, paging limits, and search behavior.
+
+Abuse controls & design decisions
+
+- **Rate Limiting**:
+  - Policy `"login"` protects `/api/auth/login` using a fixed-window limiter of 5 requests per 1-minute window.
+  - *Partitioning client identifier*: Requests are partitioned by `RemoteIpAddress`.
+  - *Documented limitations*:
+    1. **NAT / Shared Networks**: Multiple users behind a corporate gateway or NAT share the same public IP; one misbehaving client may temporarily throttle legitimate users on that network.
+    2. **Reverse Proxy / Spoofing**: In production behind a reverse proxy (e.g. NGINX, Cloudflare, ALB), `ForwardedHeadersMiddleware` with configured `KnownProxies` / `KnownNetworks` must be used. Relying on unverified `X-Forwarded-For` allows attackers to bypass IP limits via spoofed headers.
+- **CORS Policy**:
+  - Narrow named policy `"AngularDevClient"` explicitly permits `http://localhost:4200` (configurable via `Cors:AllowedOrigins`) with credentials.
+  - Adheres to OWASP standards by never combining `AllowAnyOrigin()` with `AllowCredentials()`.
+- **Security Logging**:
+  - Logs structured events with machine-readable placeholders for SIEM integration.
+  - Strict sanitization: passwords, access tokens, and Authorization headers are completely omitted from logs.
 
 Notes
 - Use User Secrets for local connection strings, JWT keys, and admin passwords. The safe configuration template contains no real credentials.
-- The API returns RFC 7807 Problem Details for validation, not-found, conflict, and internal errors. Follow the documented response shapes when validating behavior.
+- The API returns RFC 7807 Problem Details for validation, not-found, conflict, rate-limiting, and internal errors. Follow the documented response shapes when validating behavior.
 
 To run locally:
 - dotnet run --project src/OrderManagement.Api/OrderManagement.Api.csproj

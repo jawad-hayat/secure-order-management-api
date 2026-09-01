@@ -62,3 +62,42 @@ These non-default choices (relaxed non-alphanumeric requirement, explicit lockou
   - Credentials (`SeedAdmin:Password`) are sourced strictly from local User Secrets (`dotnet user-secrets set "SeedAdmin:Password" "..."`) or environment variables; passwords are NEVER hardcoded in source code or committed settings files.
   - If no password is provided in User Secrets, admin user creation is safely skipped and a helpful setup instruction is logged.
 
+## Abuse Controls & Security Logging (Checkpoint 5)
+
+### Rate Limiting Design
+- **Endpoint**: `/api/auth/login` (decorated with `[EnableRateLimiting("login")]`).
+- **Algorithm & Limit**: Fixed-window limiter with 5 permits per 1-minute window, queue limit 0.
+- **Client Partitioning**: Partitioned by `HttpContext.Connection.RemoteIpAddress` (fallback: `"unknown_client"`).
+- **Partitioning Limitations**:
+  1. *Shared IP / NAT*: Users behind a common corporate gateway share the same public IP. An attacker on that network could exhaust the limit for legitimate users.
+  2. *Reverse Proxy Spoofing*: If placed behind a reverse proxy (e.g. NGINX, Cloudflare) without `ForwardedHeadersMiddleware` (or without restrictively configured `KnownProxies`/`KnownNetworks`), attackers can manipulate `X-Forwarded-For` to bypass IP-based rate limiting.
+  3. *Distributed Attacks*: Credential stuffing distributed across large botnets requires complementary account-level lockout mechanisms (which are active on `UserManager`).
+- **Response**: Returns HTTP `429 Too Many Requests` with RFC 7807 Problem Details (`https://example.com/probs/rate-limited`).
+
+### CORS Policy Design
+- **Named Policy**: `"AngularDevClient"`.
+- **Allowed Origins**: Strictly configured (default: `http://localhost:4200` via `Cors:AllowedOrigins`), never wildcard `*`.
+- **Credentials**: `.AllowCredentials()` is enabled only because specific explicit origins are specified (`WithOrigins(...)`), ensuring adherence to CORS security specifications.
+
+### Structured Security Logging
+- **Events Logged**:
+  - Registration attempts (success, failure reasons).
+  - Login attempts (success, user-not-found, invalid password, account lockout).
+  - Rate limiting rejections.
+  - Product mutations (create, update, soft-delete with user identifier and product SKU/ID).
+- **Data Sanitization**:
+  - Passwords, access tokens, and Authorization headers are strictly excluded from log messages and format strings.
+  - Contextual metadata (`ClientIp`, `UserName`, `UserId`, `TraceId`) is included in structured log templates for SIEM indexing.
+
+
+### Answers of asked questions
+1. What is the difference between authentication and authorization?
+authentication ensure user can access the system i.e. can enter the gateway but authorization ensures what a user can do like whether he is allowed to create a product or not.
+2. When should this API return `401` versus `403`?
+when user is not authenticated API returns 401 when a user is unauthorize API returns 403
+3. Why must `UseAuthentication()` appear before `UseAuthorization()`?
+because authentication happens before authorization
+4. Why cannot a Customer role by itself prove that the customer owns order `123`?
+because he may claim wrong order in order to avoid conflict it should be the admin who decides whether this order belong to customer or not.
+
+

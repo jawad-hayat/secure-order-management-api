@@ -6,7 +6,9 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using OrderManagement.Api.Infrastructure.Identity;
 using OrderManagement.Api.Contracts.Auth;
@@ -20,19 +22,31 @@ namespace OrderManagement.Api.Controllers
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly RoleManager<IdentityRole<Guid>> _roleManager;
         private readonly IConfiguration _config;
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole<Guid>> roleManager, IConfiguration config)
+        public AuthController(
+            UserManager<ApplicationUser> userManager,
+            RoleManager<IdentityRole<Guid>> roleManager,
+            IConfiguration config,
+            ILogger<AuthController> logger)
         {
             _userManager = userManager;
             _roleManager = roleManager;
             _config = config;
+            _logger = logger;
         }
 
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest req)
         {
+            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
             if (req is null)
+            {
+                _logger.LogWarning("Security event: Registration rejected due to empty request body. ClientIp: {ClientIp}, TraceId: {TraceId}",
+                    clientIp, HttpContext.TraceIdentifier);
                 return BadRequest(new ProblemDetails { Title = "Request body is required" });
+            }
 
             var user = new ApplicationUser
             {
@@ -43,6 +57,10 @@ namespace OrderManagement.Api.Controllers
             var create = await _userManager.CreateAsync(user, req.Password);
             if (!create.Succeeded)
             {
+                var errors = string.Join("; ", create.Errors.Select(e => $"{e.Code}: {e.Description}"));
+                _logger.LogWarning("Security event: Registration failed. UserName: {UserName}, ClientIp: {ClientIp}, Errors: {Errors}, TraceId: {TraceId}",
+                    req.UserName, clientIp, errors, HttpContext.TraceIdentifier);
+
                 var v = new ValidationProblemDetails();
                 foreach (var e in create.Errors)
                 {
@@ -63,22 +81,52 @@ namespace OrderManagement.Api.Controllers
 
             await _userManager.AddToRoleAsync(user, customerRole);
 
+            _logger.LogInformation("Security event: Registration succeeded. UserId: {UserId}, UserName: {UserName}, Role: {Role}, ClientIp: {ClientIp}, TraceId: {TraceId}",
+                user.Id, user.UserName, customerRole, clientIp, HttpContext.TraceIdentifier);
+
             return CreatedAtAction(null, null); // minimal response for registration
         }
 
         [HttpPost("login")]
+        [EnableRateLimiting("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest req)
         {
+            var clientIp = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
             if (req is null)
+            {
+                _logger.LogWarning("Security event: Login rejected due to empty request body. ClientIp: {ClientIp}, TraceId: {TraceId}",
+                    clientIp, HttpContext.TraceIdentifier);
                 return BadRequest(new ProblemDetails { Title = "Request body is required" });
+            }
 
             var user = await _userManager.FindByNameAsync(req.UserName);
             if (user == null)
+            {
+                _logger.LogWarning("Security event: Login failed. Reason: UserNotFound. UserName: {UserName}, ClientIp: {ClientIp}, TraceId: {TraceId}",
+                    req.UserName, clientIp, HttpContext.TraceIdentifier);
                 return Unauthorized();
+            }
+
+            // Check for account lockout
+            if (await _userManager.IsLockedOutAsync(user))
+            {
+                _logger.LogWarning("Security event: Login failed. Reason: AccountLockedOut. UserName: {UserName}, ClientIp: {ClientIp}, LockoutEnd: {LockoutEnd}, TraceId: {TraceId}",
+                    user.UserName, clientIp, user.LockoutEnd, HttpContext.TraceIdentifier);
+                return Unauthorized();
+            }
 
             var valid = await _userManager.CheckPasswordAsync(user, req.Password);
             if (!valid)
+            {
+                await _userManager.AccessFailedAsync(user);
+                _logger.LogWarning("Security event: Login failed. Reason: InvalidCredentials. UserName: {UserName}, ClientIp: {ClientIp}, AccessFailedCount: {AccessFailedCount}, TraceId: {TraceId}",
+                    user.UserName, clientIp, user.AccessFailedCount, HttpContext.TraceIdentifier);
                 return Unauthorized();
+            }
+
+            // Reset failed access count on successful login
+            await _userManager.ResetAccessFailedCountAsync(user);
 
             // Read JWT settings from configuration
             var key = _config["Jwt:Key"];
@@ -115,6 +163,9 @@ namespace OrderManagement.Api.Controllers
                 signingCredentials: creds);
 
             var tokenStr = new JwtSecurityTokenHandler().WriteToken(token);
+
+            _logger.LogInformation("Security event: Login succeeded. UserId: {UserId}, UserName: {UserName}, Roles: {Roles}, ClientIp: {ClientIp}, TraceId: {TraceId}",
+                user.Id, user.UserName, string.Join(",", roles), clientIp, HttpContext.TraceIdentifier);
 
             var resp = new AuthResponse
             {

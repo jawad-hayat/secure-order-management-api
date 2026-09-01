@@ -96,3 +96,32 @@ Accept: application/json
 }
 
 ###
+
+### 8. CORS Preflight - Valid Origin (Allowed - Returns 204/200 with Access-Control-Allow-Origin: http://localhost:4200)
+OPTIONS {{HostAddress}}/api/products
+Origin: http://localhost:4200
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: authorization,content-type
+
+###
+
+### 9. CORS Preflight - Untrusted Origin (Denied - No Access-Control-Allow-Origin returned)
+OPTIONS {{HostAddress}}/api/products
+Origin: http://malicious-site.com
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: authorization,content-type
+
+###
+
+### 10. Rate Limiting on Login - Send rapid consecutive requests to trigger 429 Too Many Requests
+# Permit limit: 5 requests per 1-minute window per IP. The 6th request returns 429.
+POST {{HostAddress}}/api/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+  "userName": "admin",
+  "password": "WrongPasswordAttempt"
+}
+
+###

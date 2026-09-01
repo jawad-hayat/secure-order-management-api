@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
@@ -9,6 +10,7 @@ using OrderManagement.Api.Infrastructure;
 using System;
 using System.Text;
 using System.Collections.Generic;
+using System.Threading.RateLimiting;
 using Swashbuckle.AspNetCore.Filters;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -16,6 +18,61 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 
 builder.Services.AddControllers();
+
+// Configure CORS: narrow named policy for Angular dev origin (never combine AllowAnyOrigin with credentials)
+const string AngularDevCorsPolicy = "AngularDevClient";
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() 
+    ?? new[] { "http://localhost:4200" };
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(AngularDevCorsPolicy, policy =>
+    {
+        policy.WithOrigins(allowedOrigins)
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
+    });
+});
+
+// Configure Rate Limiting: named policy "login" to protect against brute-force and credential stuffing
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, token) =>
+    {
+        var clientIp = context.HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown_client";
+        var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning("Security event: Rate limit exceeded on {Path} from ClientIp: {ClientIp}. TraceId: {TraceId}",
+            context.HttpContext.Request.Path, clientIp, context.HttpContext.TraceIdentifier);
+
+        context.HttpContext.Response.ContentType = "application/problem+json";
+        var problemDetails = new ProblemDetails
+        {
+            Type = "https://example.com/probs/rate-limited",
+            Title = "Too Many Requests",
+            Status = StatusCodes.Status429TooManyRequests,
+            Detail = "Rate limit exceeded. Please wait before retrying.",
+            Instance = context.HttpContext.TraceIdentifier
+        };
+        await context.HttpContext.Response.WriteAsJsonAsync(problemDetails, cancellationToken: token);
+    };
+
+    options.AddPolicy("login", httpContext =>
+    {
+        // Partition anonymous login requests by client IP
+        var clientIp = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown_client";
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: clientIp,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+});
 
 // Customize automatic InvalidModelState responses to match our RFC7807 validation shape
 builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options =>
@@ -151,6 +208,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Enable CORS for allowed origins before authentication/authorization
+app.UseCors(AngularDevCorsPolicy);
+
+// Enable Rate Limiting
+app.UseRateLimiter();
 
 // Authentication must be called before Authorization
 app.UseAuthentication();
