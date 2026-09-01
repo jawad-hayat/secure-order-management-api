@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -13,7 +13,6 @@ using OrderManagement.Api.Infrastructure;
 using Npgsql;
 using Microsoft.EntityFrameworkCore;
 using System.Threading;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authorization;
 
 namespace OrderManagement.Api.Controllers

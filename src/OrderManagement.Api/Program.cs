@@ -158,4 +158,11 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+// Seed identity roles and optional development admin account
+await OrderManagement.Api.Infrastructure.Identity.DbInitializer.SeedIdentityAsync(
+    app.Services,
+    app.Configuration,
+    app.Environment,
+    app.Logger);
+
 app.Run();

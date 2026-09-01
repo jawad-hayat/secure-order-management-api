@@ -53,3 +53,12 @@ Notes: the table is unchanged from the requested model. Roles are coarse-grained
 - Lockout policy: lock out after 5 failed attempts for 15 minutes. Rationale: reduces brute-force feasibility while allowing recovery for legitimate users.
 
 These non-default choices (relaxed non-alphanumeric requirement, explicit lockout thresholds) are intentional trade-offs for development and documented here so reviewers can tighten them for production.
+
+## Role & Admin Seeding Decisions
+
+- Standard Roles (`Admin`, `Customer`) are idempotently seeded at application startup if they do not already exist.
+- Development Admin account:
+  - Created ONLY in `Development` environment.
+  - Credentials (`SeedAdmin:Password`) are sourced strictly from local User Secrets (`dotnet user-secrets set "SeedAdmin:Password" "..."`) or environment variables; passwords are NEVER hardcoded in source code or committed settings files.
+  - If no password is provided in User Secrets, admin user creation is safely skipped and a helpful setup instruction is logged.
+

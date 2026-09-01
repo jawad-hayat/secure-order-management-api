@@ -1,6 +1,98 @@
-@OrderManagement.Api_HostAddress = http://localhost:5028
+@HostAddress = https://localhost:7072
 
-GET {{OrderManagement.Api_HostAddress}}/weatherforecast/
+### 1. Anonymous Read (Allowed - 200 OK)
+GET {{HostAddress}}/api/products?page=1&pageSize=10
 Accept: application/json
+
+###
+
+### 2. Anonymous Product Mutation (Denied - 401 Unauthorized with WWW-Authenticate: Bearer header)
+POST {{HostAddress}}/api/products
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "Anonymous Product",
+  "sku": "ANON-001",
+  "description": "Attempt to create product without auth token",
+  "price": 999.99,
+  "availableQuantity": 10
+}
+
+###
+
+### 3. Register Customer Account (201 Created)
+POST {{HostAddress}}/api/auth/register
+Content-Type: application/json
+Accept: application/json
+
+{
+  "userName": "customer_demo",
+  "email": "customer@example.com",
+  "password": "CustomerPass123!"
+}
+
+###
+
+### 4. Login as Customer (200 OK -> returns accessToken)
+# @name customerLogin
+POST {{HostAddress}}/api/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+  "userName": "customer_demo",
+  "password": "CustomerPass123!"
+}
+
+###
+
+@customerToken = {{customerLogin.response.body.accessToken}}
+
+### 5. Customer Product Mutation (Denied - 403 Forbidden)
+POST {{HostAddress}}/api/products
+Authorization: Bearer {{customerToken}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "Customer Product",
+  "sku": "CUST-001",
+  "description": "Attempt to create product with Customer role token",
+  "price": 49.99,
+  "availableQuantity": 5
+}
+
+###
+
+### 6. Login as Development Admin (200 OK -> returns accessToken)
+# Password must match the value configured in User Secrets: dotnet user-secrets set "SeedAdmin:Password" "..."
+# @name adminLogin
+POST {{HostAddress}}/api/auth/login
+Content-Type: application/json
+Accept: application/json
+
+{
+  "userName": "admin",
+  "password": "AdminPassword123!"
+}
+
+###
+
+@adminToken = {{adminLogin.response.body.accessToken}}
+
+### 7. Admin Product Mutation (Success - 201 Created)
+POST {{HostAddress}}/api/products
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+Accept: application/json
+
+{
+  "name": "Admin Pro Laptop",
+  "sku": "ADM-PRO-001",
+  "description": "Successfully created by Admin user",
+  "price": 1499.99,
+  "availableQuantity": 50
+}
 
 ###
