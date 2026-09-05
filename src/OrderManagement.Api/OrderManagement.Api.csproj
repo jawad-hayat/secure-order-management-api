@@ -33,6 +33,8 @@
 
   <ItemGroup>
     <Folder Include="Application\Products\" />
+    <Folder Include="Application\Products\" />
+    <Folder Include="wwwroot\swagger-ui\" />
     <Folder Include="wwwroot\swagger-ui\" />
   </ItemGroup>
 

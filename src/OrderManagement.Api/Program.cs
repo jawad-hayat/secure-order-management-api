@@ -228,3 +228,5 @@ await OrderManagement.Api.Infrastructure.Identity.DbInitializer.SeedIdentityAsyn
     app.Logger);
 
 app.Run();
+
+public partial class Program;

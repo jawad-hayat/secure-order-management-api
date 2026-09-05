@@ -26,6 +26,10 @@ Database migrations
 
   dotnet ef database update --project src/OrderManagement.Api --startup-project src/OrderManagement.Api --context OrderManagementDbContext
 
+Run integration tests from the repository root:
+
+  dotnet test
+
 Local verification steps
 
 1. Build the project:
